@@ -140,7 +140,7 @@ def deviceNotification(toToast) {
 /* Send to IP and to SMS as appropriate */
 private sendCommands(command) {
     log.debug "Command request: "+command
-    sendSMSCommand(command)
+//    sendSMSCommand(command)
     sendIPCommand(command)
 }
 
