@@ -18,12 +18,12 @@
  */
 
 metadata {
-    definition (name: "LANdroid Alerter", namespace: "KeyBounce", author: "Tony McNamara") {
+    definition (name: "LANnouncer Alerter-Hubitat", namespace: "RonV42", author: "Ron Vargo") {
         capability "Alarm"
         capability "Speech Synthesis"
         capability "Notification"
         capability "Tone"
-        attribute  "LANdroidSMS","string"
+        attribute  "LANnouncerSMS","string"
     }
     preferences {
         input("DeviceLocalLan", "string", title:"Android IP Address", description:"Please enter your tablet's I.P. address", defaultValue:"" , required: false, displayDuringSetup: true)
@@ -171,7 +171,7 @@ private sendSMSCommand(commandString) {
     def preface = "+@TTSSMS@+"
     def smsValue = preface+"&"+commandString
     state.lastsmscommand = smsValue
-    sendEvent(name: "LANdroidSMS", value: smsValue, isStateChange: true)
+    sendEvent(name: "LANnouncerSMS", value: smsValue, isStateChange: true)
     /*
     if (SMSPhone?.trim()) {
         sendSmsMessage(SMSPhone, preface+"&"+commandString)
