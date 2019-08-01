@@ -146,6 +146,7 @@ private sendCommands(command) {
 
 private sendIPCommand(commandString ) {
     log.debug "Sending command to "+DeviceLocalLan
+    sendEvent(name: "LANnouncerIP", value: commandString, isStateChange: true)
     if (DeviceLocalLan?.trim()) {
         def host = DeviceLocalLan 
         def hosthex = convertIPtoHex(host)
