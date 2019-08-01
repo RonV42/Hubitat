@@ -54,11 +54,6 @@ metadata {
     }
 
     simulator {
-        // reply messages
-        ["strobe","siren","both","off"].each 
-            {
-                reply "$it": "alarm:$it"
-            }
     }
 
     tiles {
@@ -173,6 +168,8 @@ def speak(toSay) {
             toSay = "LANnouncer Version ${version}"
         }
     }
+    
+    toSay = toSay.replaceAll("\\s","%20")
 
     if (toSay?.trim()) {
         def command="&SPEAK="+toSay+"&"+getDoneString()
@@ -263,7 +260,7 @@ private sendIPCommand(commandString, sendToS3 = false) {
 
         def method = "GET"
 
-        def hubAction = new physicalgraph.device.HubAction(
+        def hubAction = new hubitat.device.HubAction(
             method: method,
             path: "/"+commandString,
             headers: headers
