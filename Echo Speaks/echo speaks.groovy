@@ -116,7 +116,8 @@ definition(
     oauth               : true,
     singleInstance      : false,
     documentationLink   : documentationUrl(),
-    videoLink           : videoUrl()
+    videoLink           : videoUrl(),
+    menu: "Integrations", // Valid values are “Integrations”, “Automations”, and “Apps”
 )
 
 preferences {
@@ -172,6 +173,7 @@ def mainPage() {
     if(settings.autoRenameDevices == null) settingUpdate("autoRenameDevices", sTRUE, sBOOL)
     if(settings.addEchoNamePrefix == null) settingUpdate("addEchoNamePrefix", sTRUE, sBOOL)
     if(settings.refreshCookieDays == null) settingUpdate("refreshCookieDays", 5, "number")
+    if(settings.cookieRefreshOverride == null) settingUpdate("cookieRefreshOverride", sFALSE, sBOOL)
     if(settings.logInfo == null) settingUpdate("logInfo", sTRUE, sBOOL)
     if(settings.logWarn == null) settingUpdate("logWarn", sTRUE, sBOOL)
     if(settings.logError == null) settingUpdate("logError", sTRUE, sBOOL)
@@ -216,6 +218,15 @@ def mainPage() {
             section(sectHead("Alexa Login Service:")) {
                 String ls = getLoginStatusDesc()
                 href "authStatusPage", title: inTS1("Login Status | Cookie Service Management", sSETTINGS), description: (ls ? "${ls}${inputFooter(sTTM)}" : inputFooter(sTTC, sNULL, true))
+
+                input "cookieRefreshOverride", sBOOL, title: inTS1("Override auto cookie refresh interval?", "day_calendar") + lineBr() + spanSm("Use a custom refresh interval instead of the default (${(Integer)settings.refreshCookieDays ?: 5} day${((Integer)settings.refreshCookieDays ?: 5) > i1 ? "s" : sBLANK}). Useful when the Amazon cookie service is unreliable.", sCLRGRY),
+                        required: false, defaultValue: false, submitOnChange: true
+                if((Boolean)settings.cookieRefreshOverride) {
+                    input "cookieRefreshOverrideDays", "number", title: inTS1("Override: refresh cookie every?\n(in days)", "day_calendar"), description: "in Days (1-90 max)", required: true, range: '1..90', defaultValue: 5, submitOnChange: true
+                    if(cookieRefreshOverrideDays != null && cookieRefreshOverrideDays < i1) { settingUpdate("cookieRefreshOverrideDays", i1, "number") }
+                    if(cookieRefreshOverrideDays != null && cookieRefreshOverrideDays > 90) { settingUpdate("cookieRefreshOverrideDays", 90, "number") }
+                    paragraph divSm(spanSmBld("Effective refresh interval: ") + spanSm("${getCookieRefreshDays()} day${getCookieRefreshDays() > i1 ? "s" : sBLANK} (next: ${nextCookieRefreshDur()})"), sCLR4D9)
+                }
             }
             if(!(Boolean)state.shownDevSharePage) { showDevSharePrefs() }
         }
@@ -269,7 +280,7 @@ def authStatusPage() {
                 Boolean cookieValid = validateCookie(true)
                 Boolean chk1 = (state.cookieData && state.cookieData.localCookie)
                 Boolean chk2 = (state.cookieData && state.cookieData.csrf  )
-                Boolean chk3 = (lastChkSec < 432000)
+                Boolean chk3 = (lastChkSec < cookieRefreshSeconds())
                 // Boolean chk4 = (cookieValid == true)
                 // log.debug "cookieValid: ${cookieValid} | chk1: $chk1 | chk2: $chl2 | chk3: $chk3 | chk4: $chk4"
                 String stat = spanSmBld("Auth Status:") + spanSmBr(getOkOrNotSymHTML(chk1 && chk2 && cookieValid))
@@ -284,9 +295,9 @@ def authStatusPage() {
 
             section(sectHead("Cookie Tools: (Tap to show)", getAppImg("cookie")), hideable: true, hidden: true) {
                 String ckDesc = pastDayChkOk ? "This will Refresh your Amazon Cookie." : "It's too soon to refresh your cookie.\nMinimum wait is 24 hours!!"
-                input "refreshCookieDays", "number", title: inTS1("Auto refresh cookie every?\n(in days)", "day_calendar"), description: "in Days (1-5 max)", required: true, range: '1..5', defaultValue: 5, submitOnChange: true
+                input "refreshCookieDays", "number", title: inTS1("Auto refresh cookie every?\n(in days)", "day_calendar"), description: "in Days (1-30 max)", required: true, range: '1..30', defaultValue: 5, submitOnChange: true
                 if(refreshCookieDays != null && refreshCookieDays < i1) { settingUpdate("refreshCookieDays", i1, "number") }
-                if(refreshCookieDays != null && refreshCookieDays > 5) { settingUpdate("refreshCookieDays", 5, "number") }
+                if(refreshCookieDays != null && refreshCookieDays > 30) { settingUpdate("refreshCookieDays", 30, "number") }
 
                 // Refreshes the cookie
                 input "refreshCookie", sBOOL, title: inTS1("Manually refresh cookie?", sRESET) + lineBr() + spanSm(ckDesc, pastDayChkOk ? sCLRGRY : sCLRRED),
@@ -2041,7 +2052,12 @@ String getServerHostURL() {
     return (srvHostOr) ?: rtnHost
 }
 
-Integer cookieRefreshSeconds() { return ((Integer)settings.refreshCookieDays ?: 5)*86400 as Integer }
+// Returns the effective auto cookie refresh interval in days, honoring the main-screen override when enabled
+Integer getCookieRefreshDays() {
+    if((Boolean)settings.cookieRefreshOverride && settings.cookieRefreshOverrideDays != null) { return (Integer)settings.cookieRefreshOverrideDays }
+    return ((Integer)settings.refreshCookieDays ?: 5)
+}
+Integer cookieRefreshSeconds() { return getCookieRefreshDays()*86400 as Integer }
 
 void clearServerAuth() {
     logDebug("clearServerAuth: serverUrl: ${getServerHostURL()}")
@@ -5288,7 +5304,8 @@ private getDiagDataJson(Boolean asString = false) {
                 cookieLastRefreshDate: getTsVal("lastCookieRrshDt") ?: null,
                 cookieLastRefreshDur: getTsVal("lastCookieRrshDt") ? seconds2Duration(getLastTsValSecs("lastCookieRrshDt")) : null,
                 cookieInvalidReason: (!(Boolean)state.authValid && state.authEvtClearReason) ? state.authEvtClearReason : sNULL,
-                cookieRefreshDays: (Integer)settings.refreshCookieDays,
+                cookieRefreshDays: getCookieRefreshDays(),
+                cookieRefreshOverride: (Boolean)settings.cookieRefreshOverride == true,
                 cookieItems: [
                     hasLocalCookie: (state.cookieData && state.cookieData.localCookie),
                     hasCSRF: (state.cookieData && state.cookieData.csrf),
@@ -5548,7 +5565,7 @@ static String seconds2Duration(Integer itimeSec, Boolean postfix=true, Integer t
 }
 
 String nextCookieRefreshDur() {
-    Integer days = (Integer)settings.refreshCookieDays ?: 5
+    Integer days = getCookieRefreshDays()
     String lastCookieRfsh = getTsVal("lastCookieRrshDt")
     if(!lastCookieRfsh) { return "Not Sure"}
     Date lastDt = Date.parse("E MMM dd HH:mm:ss z yyyy", formatDt(Date.parse("E MMM dd HH:mm:ss z yyyy", lastCookieRfsh)))
